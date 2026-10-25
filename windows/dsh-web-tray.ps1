@@ -35,6 +35,9 @@ if (Test-Path -LiteralPath $script:ConfigPath) {
 $script:WebEndpoint = $script:WebHost + ':' + $script:WebPort
 $script:WebUrl      = 'http://' + $script:WebEndpoint
 
+# Substring of the browser window title that identifies the dsh page.
+$script:WindowTitle = 'DeepSeek Harness'
+
 $script:IconOnPath  = Join-Path $script:AppDir 'dsh-web-running.ico'
 $script:IconOffPath = Join-Path $script:AppDir 'dsh-web-stopped.ico'
 $script:VbsPath     = Join-Path $script:AppDir 'dsh-web-tray.vbs'
@@ -330,6 +333,71 @@ try {
     throw
 }
 
+# --- window lookup for the tray double-click --------------------------------
+$script:WindowSource = @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+
+public static class DshWindow
+{
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder sb, int max);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int cmd);
+    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    // Returns the topmost visible window whose title contains needle, or
+    // IntPtr.Zero. EnumWindows walks the window manager's Z-order, so the
+    // first match is the most recently active one.
+    public static IntPtr Find(string needle)
+    {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows(delegate(IntPtr h, IntPtr l)
+        {
+            if (!IsWindowVisible(h)) return true;
+            StringBuilder sb = new StringBuilder(512);
+            GetWindowText(h, sb, sb.Capacity);
+            string title = sb.ToString();
+            if (title.Length > 0 && title.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                found = h;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    public static bool Activate(IntPtr h)
+    {
+        if (h == IntPtr.Zero) return false;
+        if (IsIconic(h)) ShowWindow(h, 9);
+        SetForegroundWindow(h);
+        if (GetForegroundWindow() == h) return true;
+        // Windows blocks SetForegroundWindow from a background process.
+        // A synthetic Alt press clears the foreground lock; retry once.
+        keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        SetForegroundWindow(h);
+        return GetForegroundWindow() == h;
+    }
+}
+'@
+
+$script:WindowHelperReady = $false
+try {
+    Add-Type -TypeDefinition $script:WindowSource
+    $script:WindowHelperReady = $true
+} catch {
+    Write-TrayError ('window helper compile failed: ' + ($_ | Out-String))
+}
+
 if (-not $PreviewMenu) {
     $script:mutex = New-Object -TypeName System.Threading.Mutex -ArgumentList $false, 'Local\DSHWebTray'
     if (-not $script:mutex.WaitOne(0)) { exit 0 }
@@ -585,6 +653,38 @@ function Open-Web {
     }
 }
 
+# Double-click: focus an open DSH window, otherwise open a new one. If the
+# server is stopped, ask first instead of starting it silently.
+function Open-FromTray {
+    if (-not $script:Running) {
+        $answer = [System.Windows.Forms.MessageBox]::Show(
+            'dsh web 未运行。要现在启动吗？',
+            'DSH Web',
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Question,
+            [System.Windows.Forms.MessageBoxDefaultButton]::Button1)
+        if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+        Do-Action 'start'
+        if (-not $script:Running) { return }
+    }
+
+    if ($script:WindowHelperReady) {
+        try {
+            $h = [DshWindow]::Find($script:WindowTitle)
+            if ($h -ne [IntPtr]::Zero -and [DshWindow]::Activate($h)) { return }
+        } catch {
+            Write-TrayError ($_ | Out-String)
+        }
+    }
+
+    try {
+        Start-Process $script:WebUrl
+    } catch {
+        Write-TrayError ($_ | Out-String)
+        Show-Balloon ('无法打开浏览器：' + $_.Exception.Message) 'Error'
+    }
+}
+
 function Open-Log {
     try {
         if (-not $script:WslLog) {
@@ -778,6 +878,9 @@ try {
     $script:ni.ContextMenuStrip = $script:menu
     $script:ni.Visible = $true
     if ($PreviewMenu) { $script:ni.Visible = $false }
+    $script:ni.Add_DoubleClick({
+        try { Open-FromTray } catch { Write-TrayError ($_ | Out-String) }
+    })
 
     Update-Ui
     [void](Refresh-State)
