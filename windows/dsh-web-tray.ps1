@@ -625,21 +625,21 @@ function Build-Menu {
     $script:menu.DropShadowEnabled = $true
     $script:menu.ImageScalingSize = New-Object -TypeName System.Drawing.Size -ArgumentList @($script:MenuIconSize, $script:MenuIconSize)
 
-    $itemPad = New-Pad ([int](6 * $script:Scale)) ([int](7 * $script:Scale)) ([int](12 * $script:Scale)) ([int](7 * $script:Scale))
+    $itemPad = New-Pad ([int](12 * $script:Scale)) ([int](7 * $script:Scale)) ([int](12 * $script:Scale)) ([int](7 * $script:Scale))
 
     $script:miHeader = New-Object System.Windows.Forms.ToolStripMenuItem
     $script:miHeader.Text = 'DSH Web'
     $script:miHeader.Tag = 'header'
     $script:miHeader.Enabled = $false
     $script:miHeader.Font = $script:HeaderFont
-    $script:miHeader.Padding = New-Pad ([int](6 * $script:Scale)) ([int](12 * $script:Scale)) ([int](12 * $script:Scale)) ([int](2 * $script:Scale))
+    $script:miHeader.Padding = New-Pad ([int](12 * $script:Scale)) ([int](12 * $script:Scale)) ([int](12 * $script:Scale)) ([int](2 * $script:Scale))
 
     $script:miStatus = New-Object System.Windows.Forms.ToolStripMenuItem
     $script:miStatus.Text = '已停止 · 127.0.0.1:3080'
     $script:miStatus.Tag = 'status'
     $script:miStatus.Enabled = $false
     $script:miStatus.Font = $script:StatusFont
-    $script:miStatus.Padding = New-Pad ([int](6 * $script:Scale)) 0 ([int](12 * $script:Scale)) ([int](8 * $script:Scale))
+    $script:miStatus.Padding = New-Pad ([int](12 * $script:Scale)) 0 ([int](12 * $script:Scale)) ([int](8 * $script:Scale))
 
     $script:miOpen = New-Object System.Windows.Forms.ToolStripMenuItem
     $script:miOpen.Text = '打开 Web UI'
