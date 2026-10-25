@@ -248,7 +248,7 @@ public class DshMenuRenderer : ToolStripProfessionalRenderer
         int s = Math.Min(e.ImageRectangle.Width, e.ImageRectangle.Height);
         if (s <= 0) { s = 18; }
         int lift = (int)Math.Round(e.Item.Font.Size * e.Graphics.DpiX / 72.0 * 0.13);
-        int bx = e.ImageRectangle.X + (e.ImageRectangle.Width - s) / 2;
+        int bx = e.ImageRectangle.X + (int)Math.Round(6 * e.Graphics.DpiX / 96.0) + (e.ImageRectangle.Width - s) / 2;
         int by = content.Top + (content.Height - s) / 2 + lift;
         Rectangle box = new Rectangle(bx, by, s, s);
         box.Inflate(-1, -1);
@@ -284,7 +284,10 @@ public class DshMenuRenderer : ToolStripProfessionalRenderer
         if (e.Image == null) { return; }
         Rectangle content = e.Item.ContentRectangle;
         int lift = (int)Math.Round(e.Item.Font.Size * e.Graphics.DpiX / 72.0 * 0.13);
-        int x = e.ImageRectangle.X + (e.ImageRectangle.Width - e.Image.Width) / 2;
+        int inset = (tag == "header")
+            ? (int)Math.Round(3 * e.Graphics.DpiX / 96.0)
+            : (int)Math.Round(6 * e.Graphics.DpiX / 96.0);
+        int x = e.ImageRectangle.X + inset + (e.ImageRectangle.Width - e.Image.Width) / 2;
         int y = content.Top + (content.Height - e.Image.Height) / 2 + lift;
         bool keepColor = (tag == "header" || tag == "status");
         if (!e.Item.Enabled && !keepColor)
@@ -625,21 +628,21 @@ function Build-Menu {
     $script:menu.DropShadowEnabled = $true
     $script:menu.ImageScalingSize = New-Object -TypeName System.Drawing.Size -ArgumentList @($script:MenuIconSize, $script:MenuIconSize)
 
-    $itemPad = New-Pad ([int](12 * $script:Scale)) ([int](7 * $script:Scale)) ([int](12 * $script:Scale)) ([int](7 * $script:Scale))
+    $itemPad = New-Pad ([int](20 * $script:Scale)) ([int](7 * $script:Scale)) ([int](12 * $script:Scale)) ([int](7 * $script:Scale))
 
     $script:miHeader = New-Object System.Windows.Forms.ToolStripMenuItem
     $script:miHeader.Text = 'DSH Web'
     $script:miHeader.Tag = 'header'
     $script:miHeader.Enabled = $false
     $script:miHeader.Font = $script:HeaderFont
-    $script:miHeader.Padding = New-Pad ([int](12 * $script:Scale)) ([int](12 * $script:Scale)) ([int](12 * $script:Scale)) ([int](2 * $script:Scale))
+    $script:miHeader.Padding = New-Pad ([int](20 * $script:Scale)) ([int](12 * $script:Scale)) ([int](12 * $script:Scale)) ([int](2 * $script:Scale))
 
     $script:miStatus = New-Object System.Windows.Forms.ToolStripMenuItem
     $script:miStatus.Text = '已停止 · 127.0.0.1:3080'
     $script:miStatus.Tag = 'status'
     $script:miStatus.Enabled = $false
     $script:miStatus.Font = $script:StatusFont
-    $script:miStatus.Padding = New-Pad ([int](12 * $script:Scale)) 0 ([int](12 * $script:Scale)) ([int](8 * $script:Scale))
+    $script:miStatus.Padding = New-Pad ([int](20 * $script:Scale)) 0 ([int](12 * $script:Scale)) ([int](8 * $script:Scale))
 
     $script:miOpen = New-Object System.Windows.Forms.ToolStripMenuItem
     $script:miOpen.Text = '打开 Web UI'
@@ -716,7 +719,7 @@ function Build-Menu {
     [void]$script:menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
     [void]$script:menu.Items.Add($script:miExit)
 
-    $script:menu.MinimumSize = New-Object -TypeName System.Drawing.Size -ArgumentList @([int](260 * $script:Scale), 0)
+    $script:menu.MinimumSize = New-Object -TypeName System.Drawing.Size -ArgumentList @([int](180 * $script:Scale), 0)
 
     $script:menu.Add_Opening({
         try {
