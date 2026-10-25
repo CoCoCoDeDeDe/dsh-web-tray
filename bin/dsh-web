@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+# dsh-web - run the DeepSeek Harness web UI detached from any terminal.
+#
+# Commands: start | stop | restart | status | logs | run
+# The server is started with setsid, so closing the terminal (or the Windows
+# terminal that launched WSL) does not stop it.
+set -u
+
+STATE_DIR="${DSH_WEB_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/dsh-web}"
+LOG_FILE="$STATE_DIR/web.log"
+PID_FILE="$STATE_DIR/web.pid"
+PORT="${DSH_WEB_PORT:-3080}"
+HOST="${DSH_WEB_HOST:-127.0.0.1}"
+ADOPT="${DSH_WEB_ADOPT:-1}"
+
+mkdir -p "$STATE_DIR" 2>/dev/null || true
+: >> "$LOG_FILE" 2>/dev/null || true
+
+log() { printf '%s\n' "$*"; }
+err() { printf '%s\n' "$*" >&2; }
+
+find_dsh() {
+  local c
+  if [ -n "${DSH_BIN:-}" ] && [ -x "$DSH_BIN" ]; then
+    printf '%s\n' "$DSH_BIN"; return 0
+  fi
+  if c=$(command -v dsh 2>/dev/null) && [ -n "$c" ]; then
+    printf '%s\n' "$c"; return 0
+  fi
+  export NVM_DIR="$HOME/.nvm"
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$NVM_DIR/nvm.sh" >/dev/null 2>&1 || true
+    if c=$(command -v dsh 2>/dev/null) && [ -n "$c" ]; then
+      printf '%s\n' "$c"; return 0
+    fi
+  fi
+  for c in "$HOME"/.nvm/versions/node/*/bin/dsh; do
+    [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+
+cmdline_of() { tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null || true; }
+
+is_dsh_web() {
+  local p="$1" cl
+  [ -n "$p" ] && [ -r "/proc/$p/cmdline" ] || return 1
+  cl=$(cmdline_of "$p")
+  case "$cl" in
+    *"dsh web"*|*"bin.js web"*) return 0 ;;
+  esac
+  return 1
+}
+
+listener_pid() {
+  local port="$1"
+  ss -ltnp 2>/dev/null \
+    | awk -v p=":$port" '$4 ~ (p "$") {print}' \
+    | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2
+}
+
+server_pid() {
+  local p
+  if [ -f "$PID_FILE" ]; then
+    p=$(cat "$PID_FILE" 2>/dev/null || true)
+    if [ -n "$p" ] && kill -0 "$p" 2>/dev/null && is_dsh_web "$p"; then
+      printf '%s\n' "$p"; return 0
+    fi
+    rm -f "$PID_FILE" 2>/dev/null || true
+  fi
+  if [ "$ADOPT" = "1" ]; then
+    p=$(listener_pid "$PORT")
+    if [ -n "$p" ] && is_dsh_web "$p"; then
+      printf '%s\n' "$p" > "$PID_FILE" 2>/dev/null || true
+      printf '%s\n' "$p"; return 0
+    fi
+  fi
+  return 1
+}
+
+port_busy() { [ -n "$(listener_pid "$1")" ]; }
+
+wait_port() {
+  local i
+  for i in $(seq 1 60); do
+    [ -n "$(listener_pid "$PORT")" ] && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+start() {
+  local pid bin p
+  if pid=$(server_pid); then
+    log "already running (pid $pid) on http://$HOST:$PORT"
+    return 0
+  fi
+  if port_busy "$PORT"; then
+    err "port $PORT is already in use by another process"
+    return 1
+  fi
+  bin=$(find_dsh) || { err "dsh executable not found (set DSH_BIN)"; return 1; }
+  # dsh's shebang is "#!/usr/bin/env node": make the matching node reachable
+  # even when launched from Windows without an nvm-initialized PATH.
+  export PATH="$(dirname "$bin"):$PATH"
+  printf '\n--- %s starting: %s web --host %s --port %s --no-open ---\n' \
+    "$(date -Is)" "$bin" "$HOST" "$PORT" >> "$LOG_FILE"
+  setsid "$bin" web --host "$HOST" --port "$PORT" --no-open >> "$LOG_FILE" 2>&1 < /dev/null &
+  disown 2>/dev/null || true
+  if wait_port; then
+    p=$(listener_pid "$PORT")
+    [ -n "$p" ] && printf '%s\n' "$p" > "$PID_FILE"
+    log "started (pid ${p:-?}) on http://$HOST:$PORT"
+    return 0
+  fi
+  err "failed to start on port $PORT; last log lines:"
+  tail -n 20 "$LOG_FILE" >&2 2>/dev/null || true
+  return 1
+}
+
+stop() {
+  local pid i
+  if ! pid=$(server_pid); then
+    rm -f "$PID_FILE" 2>/dev/null || true
+    log "not running"
+    return 0
+  fi
+  kill -TERM "$pid" 2>/dev/null || true
+  for i in $(seq 1 40); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.25
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -KILL "$pid" 2>/dev/null || true
+    sleep 0.5
+  fi
+  rm -f "$PID_FILE" 2>/dev/null || true
+  log "stopped (pid $pid)"
+}
+
+status() {
+  local pid
+  if pid=$(server_pid); then
+    log "running pid=$pid url=http://$HOST:$PORT"
+    return 0
+  fi
+  log "stopped"
+  return 3
+}
+
+case "${1:-}" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart)
+    stop
+    start
+    ;;
+  status)
+    status
+    ;;
+  logs)
+    exec tail -n "${2:-200}" -f "$LOG_FILE"
+    ;;
+  run)
+    shift
+    bin=$(find_dsh) || exit 1
+    export PATH="$(dirname "$bin"):$PATH"
+    exec "$bin" web --host "$HOST" --port "$PORT" --no-open "$@"
+    ;;
+  *)
+    cat <<EOF
+Usage: dsh-web {start|stop|restart|status|logs|run}
+
+  start    start dsh web in the background, detached from the terminal
+  stop     stop the background server
+  restart  stop then start
+  status   print running/stopped (exit code 3 when stopped)
+  logs     follow the server log
+  run      run in the foreground (for debugging)
+
+Environment:
+  DSH_WEB_PORT        listen port (default 3080)
+  DSH_WEB_HOST        bind address (default 127.0.0.1)
+  DSH_WEB_STATE_DIR   pid/log directory
+  DSH_BIN             explicit path to the dsh executable
+  DSH_WEB_ADOPT=0     do not adopt an already-running instance
+EOF
+    exit 2
+    ;;
+esac

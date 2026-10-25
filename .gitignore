@@ -1,0 +1,10 @@
+# runtime output (never commit these)
+*.log
+/tray-error.log
+/menu-preview.png
+/menu-preview-crop.png
+/.tray-first-run
+
+# editor / OS noise
+.DS_Store
+*~

@@ -1,0 +1,6 @@
+*.ico binary
+*.png binary
+*.ps1 text
+*.vbs text
+*.sh text eol=lf
+*.js text
