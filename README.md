@@ -42,8 +42,9 @@ dsh-web-tray/
 ## 环境要求
 
 - Windows 10/11，Windows PowerShell 5.1
-- WSL2 Ubuntu（默认发行版名 `Ubuntu`，默认用户 `yanyifan`）
+- WSL2（任意发行版）；`install.sh` 会自动探测发行版、用户、家目录和端口
 - 已安装 `dsh`，并且 `dsh web` 能正常启动
+- Windows 能通过 `127.0.0.1` 访问 WSL 里的 dsh web（默认 NAT 和 mirrored 网络都满足）
 - 重新生成图标需要 Node.js 和 dsh 自带的 `sharp`（脚本会自动定位）
 
 ## 安装
@@ -56,16 +57,19 @@ cd ~/projects/profession/dsh-web-tray
 
 `install.sh` 会：
 
-1. 安装 `bin/dsh-web` 到 `~/.local/bin/dsh-web`
-2. 复制 Windows 文件到 `%LOCALAPPDATA%\DSH`
-3. 创建桌面和开始菜单快捷方式 `DSH Web Tray`
-4. `--restart` 时重启正在运行的托盘（不会停止 dsh web）
+1. 探测 WSL 发行版、用户、家目录和端口
+2. 生成 `%LOCALAPPDATA%\DSH\dsh-web-tray.config.ps1`（已存在则保留）
+3. 安装 `bin/dsh-web` 到 `~/.local/bin/dsh-web`
+4. 复制 Windows 文件到 `%LOCALAPPDATA%\DSH`
+5. 创建桌面和开始菜单快捷方式 `DSH Web Tray`
+6. `--restart` 时重启正在运行的托盘（不会停止 dsh web）
 
 它不会改动你已有的两个开机自启设置。
 
-如果 `%LOCALAPPDATA%` 解析不到，可以手动指定：
+探测结果可以用环境变量覆盖：
 
 ```bash
+DSH_WSL_DISTRO=Debian DSH_WSL_USER=me DSH_WEB_PORT=3090 ./install.sh --refresh-config
 DSH_WIN_APPDIR=/mnt/c/Users/<you>/AppData/Local/DSH ./install.sh --restart
 ```
 
@@ -137,15 +141,21 @@ powershell.exe -File windows/dsh-web-tray.ps1 -PreviewMenu
 
 ## 配置
 
-默认值写死在两个地方：
+部署目录里的 `dsh-web-tray.config.ps1` 是唯一配置源，托盘和 web 自启 VBS 都读它：
 
-- `windows/dsh-web-tray.ps1` 顶部：`$script:Distro`、`$script:WslUser`、`$script:WebUrl`
-- `windows/dsh-web-autostart.vbs`：发行版名、用户名、`dsh-web` 路径
+```powershell
+$script:Distro    = 'Ubuntu'
+$script:WslUser   = 'yanyifan'
+$script:WslScript = '/home/yanyifan/.local/bin/dsh-web'
+$script:WslLog    = '/home/yanyifan/.local/state/dsh-web/web.log'
+$script:WebHost   = '127.0.0.1'
+$script:WebPort   = '3080'
+```
 
-如果修改端口，还需要同步：
-
-- `bin/dsh-web` 的 `DSH_WEB_PORT` 默认值
-- `windows/dsh-web-tray.ps1` 的 `$script:WebUrl`
+- 由 `install.sh` 生成，不在 git 里
+- 已存在时默认保留；`./install.sh --refresh-config` 重新探测并覆盖
+- 端口同时用于 `dsh-web`（通过 `DSH_WEB_PORT`）和托盘菜单里的地址
+- 只支持同机 `127.0.0.1` 回环；dsh 在远程主机时需要自行做端口转发
 
 ## Git 远程
 
@@ -166,7 +176,7 @@ git push -u origin main
 ## 说明
 
 - 停止/重启 dsh web 会中断当前浏览器页面，刷新即可恢复。
-- 托盘默认管理 `127.0.0.1:3080`。
+- 托盘管理 `dsh-web-tray.config.ps1` 里配置的地址（默认 `127.0.0.1:3080`）。
 - 如果托盘图标被 Windows 折叠到 `^` 溢出区，拖到任务栏即可常驻。
 - 若更改 Windows 显示缩放，退出托盘再启动会按新 DPI 重载。
 - dsh 鲸鱼图标来自 dsh 自带 favicon，版权归 DeepSeek；本仓库只做 Windows 图标包装。

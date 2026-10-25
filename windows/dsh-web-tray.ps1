@@ -5,14 +5,35 @@
 
 $ErrorActionPreference = 'Stop'
 
-$script:Distro     = 'Ubuntu'
-$script:WslUser    = 'yanyifan'
-$script:WslScript  = '/home/yanyifan/.local/bin/dsh-web'
-$script:WslLog     = '/home/yanyifan/.local/state/dsh-web/web.log'
-$script:WebUrl     = 'http://127.0.0.1:3080'
-
 $script:AppDir = $PSScriptRoot
 if (-not $script:AppDir) { $script:AppDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+
+# Fallbacks for the very first run, before install.sh has generated a config.
+# dsh-web-tray.config.ps1 (same directory) is the single source of truth and
+# overrides any of these. It is generated, not tracked in git.
+$script:Distro    = 'Ubuntu'
+$script:WslUser   = ''
+$script:WslScript = ''
+$script:WslLog    = ''
+$script:WebHost   = '127.0.0.1'
+$script:WebPort   = '3080'
+
+$script:ConfigPath    = Join-Path $script:AppDir 'dsh-web-tray.config.ps1'
+$script:ConfigMissing = $false
+$script:ConfigError   = ''
+if (Test-Path -LiteralPath $script:ConfigPath) {
+    try {
+        . $script:ConfigPath
+    } catch {
+        $script:ConfigMissing = $true
+        $script:ConfigError = $_ | Out-String
+    }
+} else {
+    $script:ConfigMissing = $true
+}
+
+$script:WebEndpoint = $script:WebHost + ':' + $script:WebPort
+$script:WebUrl      = 'http://' + $script:WebEndpoint
 
 $script:IconOnPath  = Join-Path $script:AppDir 'dsh-web-running.ico'
 $script:IconOffPath = Join-Path $script:AppDir 'dsh-web-stopped.ico'
@@ -317,7 +338,10 @@ if (-not $PreviewMenu) {
 
 # --- helpers ----------------------------------------------------------------
 function Invoke-DshWeb([string]$Action) {
-    $out = & $script:WslExe -d $script:Distro -u $script:WslUser -- $script:WslScript $Action 2>&1
+    if (-not $script:WslUser -or -not $script:WslScript) {
+        return [pscustomobject]@{ Text = 'not configured'; Code = 2 }
+    }
+    $out = & $script:WslExe -d $script:Distro -u $script:WslUser -- /usr/bin/env "DSH_WEB_PORT=$($script:WebPort)" $script:WslScript $Action 2>&1
     $code = $LASTEXITCODE
     $text = (($out | ForEach-Object { "$_" }) -join "`n").Trim()
     return [pscustomobject]@{ Text = $text; Code = $code }
@@ -479,13 +503,13 @@ function Update-Ui {
     if ($script:Running) {
         $script:ni.Icon = $script:IconOn
         $script:ni.Text = 'DSH Web · 运行中'
-        $script:miStatus.Text = '运行中 · 127.0.0.1:3080'
+        $script:miStatus.Text = '运行中 · ' + $script:WebEndpoint
         $script:miOpen.Text = '打开 Web UI'
         $dot = $p.DotOn
     } else {
         $script:ni.Icon = $script:IconOff
         $script:ni.Text = 'DSH Web · 已停止'
-        $script:miStatus.Text = '已停止 · 127.0.0.1:3080'
+        $script:miStatus.Text = '已停止 · ' + $script:WebEndpoint
         $script:miOpen.Text = '启动并打开 Web UI'
         $dot = $p.DotOff
     }
@@ -563,6 +587,10 @@ function Open-Web {
 
 function Open-Log {
     try {
+        if (-not $script:WslLog) {
+            Show-Balloon '未配置日志路径，请运行 install.sh 生成配置。' 'Warning'
+            return
+        }
         $tmp = Join-Path $env:TEMP 'dsh-web.log'
         $out = & $script:WslExe -d $script:Distro -u $script:WslUser -- /usr/bin/tail -n 300 $script:WslLog 2>&1
         ($out | ForEach-Object { "$_" }) | Set-Content -LiteralPath $tmp -Encoding UTF8
@@ -638,7 +666,7 @@ function Build-Menu {
     $script:miHeader.Padding = New-Pad ([int](20 * $script:Scale)) ([int](12 * $script:Scale)) ([int](12 * $script:Scale)) ([int](2 * $script:Scale))
 
     $script:miStatus = New-Object System.Windows.Forms.ToolStripMenuItem
-    $script:miStatus.Text = '已停止 · 127.0.0.1:3080'
+    $script:miStatus.Text = '已停止 · ' + $script:WebEndpoint
     $script:miStatus.Tag = 'status'
     $script:miStatus.Enabled = $false
     $script:miStatus.Font = $script:StatusFont
@@ -754,6 +782,22 @@ try {
     Update-Ui
     [void](Refresh-State)
 
+    if (-not $PreviewMenu -and $script:ConfigError) {
+        Write-TrayError ('config: ' + $script:ConfigError)
+    }
+    if (-not $PreviewMenu -and $script:ConfigMissing) {
+        Write-TrayError ('config not found: ' + $script:ConfigPath)
+        $script:configTimer = New-Object System.Windows.Forms.Timer
+        $script:configTimer.Interval = 4000
+        $script:configTimer.Add_Tick({
+            try {
+                $script:configTimer.Stop()
+                Show-Balloon 'dsh-web-tray.config.ps1 缺失或无法加载，正在使用内置默认值。请运行 install.sh 生成配置。' 'Warning'
+            } catch { Write-TrayError ($_ | Out-String) }
+        })
+        $script:configTimer.Start()
+    }
+
     if (-not $PreviewMenu -and -not (Test-Path -LiteralPath $script:FirstRunMarker)) {
         try { Set-Content -LiteralPath $script:FirstRunMarker -Value (Get-Date -Format s) -Encoding ASCII } catch { }
         $script:firstRunTimer = New-Object System.Windows.Forms.Timer
@@ -833,6 +877,7 @@ try {
 } finally {
     try { if ($script:timer) { $script:timer.Stop(); $script:timer.Dispose() } } catch { }
     try { if ($script:firstRunTimer) { $script:firstRunTimer.Stop(); $script:firstRunTimer.Dispose() } } catch { }
+    try { if ($script:configTimer) { $script:configTimer.Stop(); $script:configTimer.Dispose() } } catch { }
     try { if ($script:previewTimer) { $script:previewTimer.Stop(); $script:previewTimer.Dispose() } } catch { }
     try { if ($script:previewShotTimer) { $script:previewShotTimer.Stop(); $script:previewShotTimer.Dispose() } } catch { }
     try { if ($script:previewBackdrop) { $script:previewBackdrop.Close(); $script:previewBackdrop.Dispose() } } catch { }

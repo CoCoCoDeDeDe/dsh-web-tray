@@ -8,3 +8,6 @@
 # editor / OS noise
 .DS_Store
 *~
+
+# generated per-machine config
+dsh-web-tray.config.ps1

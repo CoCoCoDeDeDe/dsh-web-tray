@@ -1,7 +1,7 @@
 ﻿DSH Web 托盘控制器
 ===================
 仓库：dsh-web-tray
-位置：C:\Users\13282\AppData\Local\DSH
+位置：%LOCALAPPDATA%\DSH
 
 启动
 ----
@@ -47,6 +47,14 @@ WSL 命令
   日志：~/.local/state/dsh-web/web.log
   PID： ~/.local/state/dsh-web/web.pid
 
+配置
+----
+  dsh-web-tray.config.ps1 记录本机的 WSL 发行版、用户名、dsh-web 路径和端口。
+  由仓库里的 install.sh 生成，已存在时保留。
+  换发行版/用户/端口：在仓库目录运行
+    ./install.sh --refresh-config
+  也可以直接编辑该文件，改完重启托盘生效。
+
 外观与 DPI
 ----------
 - 鲸鱼图标：蓝色=运行中，灰色=已停止，多尺寸 ICO（16/20/24/28/32/40/48/64/128/256）。
@@ -59,6 +67,7 @@ WSL 命令
   dsh-web-tray.ps1       托盘主程序
   dsh-web-tray.vbs       无窗口启动托盘
   dsh-web-autostart.vbs  登录时启动 dsh web
+  dsh-web-tray.config.ps1 本机配置（发行版/用户/端口）
   install.ps1            创建桌面/开始菜单/自启快捷方式
   dsh-web-running.ico    运行中图标
   dsh-web-stopped.ico    已停止图标
@@ -68,7 +77,7 @@ WSL 命令
 1. 托盘菜单 → 停止 → 退出托盘
 2. 删除桌面和开始菜单里的 "DSH Web Tray"
 3. 删除 Startup 里的 "DSH Web Tray.lnk" 和 "DSH Web Server.lnk"（如果存在）
-4. 删除 C:\Users\13282\AppData\Local\DSH
+4. 删除 %LOCALAPPDATA%\DSH
 5. 可选：删除 ~/.local/bin/dsh-web 和 ~/.local/state/dsh-web
 
 图标来源
