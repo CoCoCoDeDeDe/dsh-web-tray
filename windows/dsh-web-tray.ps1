@@ -625,21 +625,21 @@ function Build-Menu {
     $script:menu.DropShadowEnabled = $true
     $script:menu.ImageScalingSize = New-Object -TypeName System.Drawing.Size -ArgumentList @($script:MenuIconSize, $script:MenuIconSize)
 
-    $itemPad = New-Pad 0 ([int](7 * $script:Scale)) ([int](12 * $script:Scale)) ([int](7 * $script:Scale))
+    $itemPad = New-Pad ([int](6 * $script:Scale)) ([int](7 * $script:Scale)) ([int](12 * $script:Scale)) ([int](7 * $script:Scale))
 
     $script:miHeader = New-Object System.Windows.Forms.ToolStripMenuItem
     $script:miHeader.Text = 'DSH Web'
     $script:miHeader.Tag = 'header'
     $script:miHeader.Enabled = $false
     $script:miHeader.Font = $script:HeaderFont
-    $script:miHeader.Padding = New-Pad 0 ([int](12 * $script:Scale)) ([int](12 * $script:Scale)) ([int](2 * $script:Scale))
+    $script:miHeader.Padding = New-Pad ([int](6 * $script:Scale)) ([int](12 * $script:Scale)) ([int](12 * $script:Scale)) ([int](2 * $script:Scale))
 
     $script:miStatus = New-Object System.Windows.Forms.ToolStripMenuItem
     $script:miStatus.Text = '已停止 · 127.0.0.1:3080'
     $script:miStatus.Tag = 'status'
     $script:miStatus.Enabled = $false
     $script:miStatus.Font = $script:StatusFont
-    $script:miStatus.Padding = New-Pad 0 0 ([int](12 * $script:Scale)) ([int](8 * $script:Scale))
+    $script:miStatus.Padding = New-Pad ([int](6 * $script:Scale)) 0 ([int](12 * $script:Scale)) ([int](8 * $script:Scale))
 
     $script:miOpen = New-Object System.Windows.Forms.ToolStripMenuItem
     $script:miOpen.Text = '打开 Web UI'
@@ -779,11 +779,13 @@ try {
         $script:previewBackdrop = New-Object System.Windows.Forms.Form
         $script:previewBackdrop.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
         $script:previewBackdrop.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
-        $script:previewBackdrop.Location = New-Object -TypeName System.Drawing.Point -ArgumentList 0, 0
-        $script:previewBackdrop.Size = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Size
+        $script:previewBackdrop.Location = New-Object -TypeName System.Drawing.Point -ArgumentList 100, 100
+        $script:previewBackdrop.Size = New-Object -TypeName System.Drawing.Size -ArgumentList 420, 620
         $script:previewBackdrop.BackColor = [System.Drawing.Color]::FromArgb(233, 238, 246)
         $script:previewBackdrop.ShowInTaskbar = $false
+        $script:previewBackdrop.TopMost = $true
         $script:previewBackdrop.Show()
+        $script:previewBackdrop.Activate()
         $shotPath = $PreviewShot
         if (-not $shotPath) { $shotPath = Join-Path $script:AppDir 'menu-preview.png' }
         $script:previewTimer = New-Object System.Windows.Forms.Timer
@@ -791,7 +793,7 @@ try {
         $script:previewTimer.Add_Tick({
             try {
                 $script:previewTimer.Stop()
-                $script:menu.Show(120, 120)
+                $script:menu.Show($script:previewBackdrop, (New-Object -TypeName System.Drawing.Point -ArgumentList 20, 20))
                 try { $script:miOpen.Select() } catch { }
                 $script:previewShotTimer = New-Object System.Windows.Forms.Timer
                 $script:previewShotTimer.Interval = 900

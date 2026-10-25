@@ -49,7 +49,7 @@ dsh-web-tray/
 ## 安装
 
 ```bash
-git clone <your-repo-url> ~/projects/profession/dsh-web-tray
+git clone https://github.com/CoCoCoDeDeDe/dsh-web-tray.git ~/projects/profession/dsh-web-tray
 cd ~/projects/profession/dsh-web-tray
 ./install.sh --restart
 ```
@@ -152,7 +152,7 @@ powershell.exe -File windows/dsh-web-tray.ps1 -PreviewMenu
 仓库名建议：**`dsh-web-tray`**。
 
 ```bash
-git remote add origin git@github.com:<you>/dsh-web-tray.git
+git remote add origin https://github.com/CoCoCoDeDeDe/dsh-web-tray.git
 git push -u origin main
 ```
 
