@@ -768,7 +768,9 @@ try {
     $script:timer.Interval = 10000
     $script:timer.Add_Tick({
         try {
-            if ($script:Running) { [void](Refresh-State) }
+            if ($script:Running -or (Test-Path -LiteralPath $script:WebStartupLnk)) {
+                [void](Refresh-State)
+            }
         } catch { Write-TrayError ($_ | Out-String) }
     })
     $script:timer.Start()
